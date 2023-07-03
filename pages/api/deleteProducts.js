@@ -1,10 +1,13 @@
-import axios from 'axios';
+// pages/api/deleteProducts.js
 
-export default async function handler(req, res) {
-  const { store_hash, auth_token } = req.body;
-  
+import axios from 'axios';
+import async from 'async';
+
+export default async (req, res) => {
+  const store_hash = req.body.store_hash;
+  const auth_token = req.body.auth_token;
+
   const baseURL = `https://api.bigcommerce.com/stores/${store_hash}/v3/catalog/products`;
-  
   const headers = {
     'X-Auth-Token': auth_token,
     'Accept': 'application/json'
@@ -12,6 +15,7 @@ export default async function handler(req, res) {
 
   let productIds = [];
   let page = 1;
+  let productsDeleted = 0;
 
   const getProductIds = async () => {
     try {
@@ -37,18 +41,19 @@ export default async function handler(req, res) {
         chunks.push(productIds.slice(i, i + 250));
       }
 
-      for (let chunk of chunks) {
+      await async.eachSeries(chunks, async (chunk) => {
         await axios.delete(baseURL, {
           headers,
           params: { 'id:in': chunk.join(',') }
         });
-      }
+        productsDeleted += chunk.length;
+      });
     } catch (err) {
       console.error(`Error deleting products: ${err}`);
     }
   };
 
-  await getProductIds().then(() => deleteProducts()).catch(err => console.error(err));
-
-  res.status(200).json({ status: 'Products deleted' });
-}
+  await getProductIds();
+  await deleteProducts();
+  res.status(200).json({ status: 'ok', productsDeleted, productsLeft: productIds.length - productsDeleted });
+};
